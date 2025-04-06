@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "LoraReceiver"
+		},
+		{
+			"name": "LoraSender",
+			"path": "LoraSender"
+		}
+	],
+	"settings": {}
+}
