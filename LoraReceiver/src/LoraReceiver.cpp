@@ -104,13 +104,19 @@ void setup()
 
 void loop()
 {
-  // Serial.println("Loop Start");
+  while (1)
+  {
+    /* code */
+  
+  
+   Serial.println("Loop Start");
   neopixelWrite(RGB_BUILTIN, 90, 0, 0);
 
-  // Serial.println("Wait for receiving a message");
-  delay(5000);
+   Serial.println("Wait for receiving a message");
+  delay(10000);
   neopixelWrite(RGB_BUILTIN, 0, 0, 0);
   receiveValuesLoRa();
+  }
 }
 
 void receiveValuesLoRa()
