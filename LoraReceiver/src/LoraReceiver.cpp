@@ -12,6 +12,7 @@ LoRa WLAN Bridge
 
   History: master if not shown otherwise
   20250405  V0.1: Copy from LoRABridge
+  20250407  V0.2: Successfully tested with LoraESPIDF Sender Version 0.5
 
 
 
