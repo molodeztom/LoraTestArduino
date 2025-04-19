@@ -83,6 +83,7 @@ void setup()
   config.SPED.uartBaudRate = UART_BPS_9600;
   config.SPED.uartParity = MODE_00_8N1;
   config.OPTION.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;
+  config.OPTION.fec = FEC_1_ON; // Turn off Forward Error Correction Switch
 
   delay(500);
   Serial.println("in setup routine");
@@ -111,7 +112,7 @@ void loop()
   
   
    Serial.println("Loop Start");
-  neopixelWrite(RGB_BUILTIN, 90, 0, 0);
+  neopixelWrite(RGB_BUILTIN, 00, 0, 0);
 
    Serial.println("Wait for receiving a message");
   delay(10000);
@@ -138,6 +139,10 @@ void receiveValuesLoRa()
     {
       // Print the data received
       Serial.println(rc.data);
+      neopixelWrite(RGB_BUILTIN, 50, 0, 0);
+      delay(500);
+      neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Off
+
       
     }
 

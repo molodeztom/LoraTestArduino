@@ -139,14 +139,25 @@ e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
 
 void loop()
 {
+  Configuration config;
   Serial.println("Loop Start");
   neopixelWrite(RGB_BUILTIN, 60, 0, 0); // dark
   ++bootCount;
-  delay(2000);
+  delay(5000);
   Serial.println("Hi, I'm going to send message!");
+  ResponseStructContainer c;
+  c = e32ttl.getConfiguration();
+  // It's important get configuration pointer before all other operation
+  Configuration configuration = *(Configuration*) c.data;
+  Serial.println(c.status.getResponseDescription());
+  Serial.println(c.status.code);
+
+  printParameters(configuration) 
+  ;
+
 
   // Send message
-   ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
+  // ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
   //measureTempHumi();
 if(interruptCounter > 0){
   portENTER_CRITICAL(&mux);
