@@ -110,6 +110,8 @@ config.SPED.airDataRate = AIR_DATA_RATE_010_24; // 2.4kbps
 config.SPED.uartBaudRate = UART_BPS_9600;
 config.SPED.uartParity = MODE_00_8N1;
 config.OPTION.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;
+config.OPTION.fec = FEC_1_ON; // Turn off Forward Error Correction Switch
+
 
 delay(500);
 Serial.println("in setup routine");
@@ -157,7 +159,7 @@ void loop()
 
 
   // Send message
-  // ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
+  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
   //measureTempHumi();
 if(interruptCounter > 0){
   portENTER_CRITICAL(&mux);
