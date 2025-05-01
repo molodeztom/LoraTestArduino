@@ -148,13 +148,13 @@ void loop()
   delay(5000);
   Serial.println("Hi, I'm going to send message!");
   ResponseStructContainer c;
-  c = e32ttl.getConfiguration();
+//  c = e32ttl.getConfiguration();
   // It's important get configuration pointer before all other operation
-  Configuration configuration = *(Configuration*) c.data;
-  Serial.println(c.status.getResponseDescription());
-  Serial.println(c.status.code);
+  //Configuration configuration = *(Configuration*) c.data;
+  //Serial.println(c.status.getResponseDescription());
+  //Serial.println(c.status.code);
 
-  printParameters(configuration) 
+  //printParameters(configuration) 
   ;
 
 
