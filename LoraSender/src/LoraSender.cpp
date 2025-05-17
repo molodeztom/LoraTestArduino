@@ -16,6 +16,7 @@ RainSensor
 
   History: master if not shown otherwise
   20250405  V0.1: Copy from RainSensor Project
+  20250517  V0.2: Add receive function
 
 
 
@@ -81,6 +82,7 @@ void printParameters(struct Configuration configuration);
 void measureTempHumi();
 void sendValuesLoRa();
 void sendSingleData(LORA_DATA_STRUCTURE data);
+void receiveValuesLoRa();
 void IRAM_ATTR handleInterrupt();
 
 void setup()
@@ -160,6 +162,9 @@ void loop()
 
   // Send message
   ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
+    Serial.println("Wait for receiving a message");
+  delay(10000);
+    receiveValuesLoRa();
   //measureTempHumi();
 if(interruptCounter > 0){
   portENTER_CRITICAL(&mux);
@@ -353,4 +358,34 @@ void IRAM_ATTR handleInterrupt() {
   portENTER_CRITICAL_ISR(&mux);
   interruptCounter++;
   portEXIT_CRITICAL_ISR(&mux);
+}
+
+
+void receiveValuesLoRa()
+{
+  // LORA_DATA_STRUCTURE sLoRaReceiveData;
+  //  If something available
+  if (e32ttl.available() > 1)
+  {
+    // read the String message
+    ResponseContainer rc = e32ttl.receiveMessage();
+    neopixelWrite(RGB_BUILTIN, 90, 0, 0); // Green
+    // Is something goes wrong print error
+    if (rc.status.code != 1)
+    {
+      rc.status.getResponseDescription();
+    }
+    else
+    {
+      // Print the data received
+      Serial.println(rc.data);
+      neopixelWrite(RGB_BUILTIN, 50, 0, 0);
+      delay(500);
+      neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Off
+
+      
+    }
+
+  
+  }
 }
