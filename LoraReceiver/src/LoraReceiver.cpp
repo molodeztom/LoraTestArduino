@@ -59,7 +59,7 @@ const int ChannelNumber = 6;
 // use hardware serial #1
 LoRa_E32 e32ttl(&Serial1, AUX, M0, M1); // RX, TX
 
-const String sSoftware = "LoraReceiver V0.1";
+const String sSoftware = "LoraSendReceiver V0.2";
 
 // put function declarations here:
 
@@ -106,17 +106,16 @@ void setup()
 
 void loop()
 {
+    Serial.println("Loop Start");
   while (1)
   {
     /* code */
   
+  delay(1000);
+ 
+//   Serial.println("Wait for receiving a message");
   
-   Serial.println("Loop Start");
-  neopixelWrite(RGB_BUILTIN, 00, 0, 0);
 
-   Serial.println("Wait for receiving a message");
-  delay(10000);
-  neopixelWrite(RGB_BUILTIN, 0, 0, 0);
   receiveValuesLoRa();
   }
 }
@@ -129,11 +128,12 @@ void receiveValuesLoRa()
   {
     // read the String message
     ResponseContainer rc = e32ttl.receiveMessage();
-    neopixelWrite(RGB_BUILTIN, 90, 0, 0); // Green
+   
     // Is something goes wrong print error
     if (rc.status.code != 1)
     {
       rc.status.getResponseDescription();
+      Serial.println("Error receiving data");
     }
     else
     {
@@ -146,58 +146,8 @@ void receiveValuesLoRa()
       
     }
 
-    // TODO re enable later
-    /*
-
-
-    if (e32ttl.available() > 1)
-    {
-      // read the String message
-      int BytesRec = e32ttl.available();
-      ResponseStructContainer rc = e32ttl.receiveMessage();
-
-      //memcpy(&sLoRaReceiveData, rc.data, sizeof(sLoRaReceiveData));
-      //  sLoRaReceiveData = *(LORA_DATA_STRUCTURE*) rc.data;
-      // e32ttl.receiveMessage(sizeof(data));
-      String result = rc.status.getResponseDescription();
-      Serial.println(result);
-
-      Serial.println("Received something");
-      int DataSize = sizeof(sLoRaReceiveData);
-      Serial.println("DataSize: ");
-      Serial.println(DataSize);
-
-      // Is something goes wrong print error
-      if (rc.status.code != 1)
-      {
-        Serial.println(rc.status.getResponseDescription());
-      }
-      else
-      {
-        // Print the data received
-        Serial.println(rc.status.getResponseDescription());
-        Serial.println("Channel: ");
-        Serial.println(sLoRaReceiveData.iSensorChannel);
-        switch (sLoRaReceiveData.eDataSource)
-        {
-        case rainSensor:
-          Serial.println("Rain mm: ");
-
-          break;
-        case tempSensor:
-          Serial.println("Temperature: ");
-          break;
-        case humiSensor:
-          Serial.println("Humidity: ");
-          break;
-        default:
-          Serial.println("Error: unknown sensor type");
-          break;
-        }
-        Serial.println("Data: ");
-        Serial.println(sLoRaReceiveData.iData);
-
-      }*/
+   
+      
   }
 }
 void printReceivedData()

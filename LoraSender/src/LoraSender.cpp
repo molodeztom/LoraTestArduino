@@ -122,7 +122,7 @@ Serial.println("in setup routine");
 e32ttl.begin();
 e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
 
-   neopixelWrite(RGB_BUILTIN, 0, 0, 60); // BLUE
+   neopixelWrite(RGB_BUILTIN, 0, 0, 0); // BLUE
   fRainMM = 0;
   delay(500);
   ResponseStructContainer c;
@@ -143,142 +143,28 @@ e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
 
 void loop()
 {
-  Configuration config;
-  Serial.println("Loop Start");
-  neopixelWrite(RGB_BUILTIN, 60, 0, 0); // dark
-  ++bootCount;
-  delay(5000);
-  Serial.println("Hi, I'm going to send message!");
-  ResponseStructContainer c;
-//  c = e32ttl.getConfiguration();
-  // It's important get configuration pointer before all other operation
-  //Configuration configuration = *(Configuration*) c.data;
-  //Serial.println(c.status.getResponseDescription());
-  //Serial.println(c.status.code);
+  
+ 
 
-  //printParameters(configuration) 
-  ;
+  ++bootCount;
+  delay(6000);
+  Serial.println("Hi, I'm going to send message!");
+
 
 
   // Send message
-  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
-    Serial.println("Wait for receiving a message");
-  delay(10000);
-    receiveValuesLoRa();
-  //measureTempHumi();
-if(interruptCounter > 0){
-  portENTER_CRITICAL(&mux);
-  interruptCounter = 0;
-    portEXIT_CRITICAL(&mux);
-    numberOfInterrupts++;
-    Serial.print("An interrupt has occured. Total: ");
-    Serial.println(numberOfInterrupts);
-    Serial.println(interruptCounter);
-
-}
-
-/*   
-  int val;
+  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount) + "\n");
+   Serial.println("Wait for receiving a message");
+delay(6000);
+  receiveValuesLoRa(); 
   
-  val = digitalRead(HSENSD);
-if (val == 1){
-      neopixelWrite(RGB_BUILTIN, 60, 0, 0); // Red
-      fRainMM++;
-      Serial.print("Rain pulses: ");
-      Serial.println(fRainMM);
 
   }
-  else neopixelWrite(RGB_BUILTIN, 0, 60, 0); // Green */
-
- 
-  //Serial.println("Hi, I'm going to send message!");
-  //sendValuesLoRa();
-
-  //delay(1000);
-
-  /*  // If something available
-   if (e32ttl.available() > 1)
-   {
-     // read the String message
-     ResponseContainer rc = e32ttl.receiveMessage();
-     Serial.println("Received something");
-     // Is something goes wrong print error
-     if (rc.status.code != 1)
-     {
-       Serial.println(rc.status.getResponseDescription());
-     }
-     else
-     {
-       // Print the data received
-       Serial.println(rc.status.getResponseDescription());
-       Serial.println(rc.data);
-     }
-   }
-   if (Serial.available())
-   {
-     String input = Serial1.readString();
-     e32ttl.sendMessage(input);
-   }
-   ResponseStatus rs = e32ttl.sendMessage("Hello, world? ");
-   String result = rs.getResponseDescription();
-   Serial.println(result); */
-  //Serial.println("Loop End");
-
-  // esp_deep_sleep_start();
-}
-/* optimized data structure to save bytes to transfer. We send only one measurement
-and name the measurement in eDataSource. So far the measurements are not different
-so the structure remains the same */
-void sendValuesLoRa()
-{
-  LORA_DATA_STRUCTURE data;
-  int nDataSize = 0;
 
 
-  uint8_t bs[sizeof(data)];
-  data.iSensorChannel = 8;
-  // send temp
-  data.eDataSource = tempSensor;
-  data.iData = fTemp;
-  sendSingleData(data);
 
-  delay(1000);
-  // send humi
-  data.eDataSource = humiSensor;
-  data.iData = fRelHum;
-   sendSingleData(data);
 
-  delay(1000);
-  // send rain
-  data.eDataSource = rainSensor;
-  data.iData = fRainMM;
-   sendSingleData(data);
 
-  delay(1000);
-}
-
-void sendSingleData(LORA_DATA_STRUCTURE data)
-{
-  uint8_t bs[sizeof(data)];
-
-  // copy data to send buffer
-  memcpy(bs, &data, sizeof(data));
-  // Send message
-  Serial.println("DataSize: ");
-  Serial.println(sizeof(data));
-  // ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
-  ResponseStatus rs = e32ttl.sendMessage(bs, sizeof(data));
-  //    ResponseStatus rs = e32ttl.sendMessage(&data, sizeof(data));
-  Serial.println(rs.getResponseDescription());
-}
-
-void measureTempHumi()
-{
-
-  fTemp = 21.3 + bootCount;
-  fRelHum = 90.2 + bootCount;
- 
-}
 
 void printParameters(struct Configuration configuration)
 {
@@ -369,7 +255,7 @@ void receiveValuesLoRa()
   {
     // read the String message
     ResponseContainer rc = e32ttl.receiveMessage();
-    neopixelWrite(RGB_BUILTIN, 90, 0, 0); // Green
+ 
     // Is something goes wrong print error
     if (rc.status.code != 1)
     {
@@ -379,7 +265,7 @@ void receiveValuesLoRa()
     {
       // Print the data received
       Serial.println(rc.data);
-      neopixelWrite(RGB_BUILTIN, 50, 0, 0);
+      neopixelWrite(RGB_BUILTIN, 0, 0, 0);
       delay(500);
       neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Off
 
