@@ -85,9 +85,27 @@ void sendSingleData(LORA_DATA_STRUCTURE data);
 void receiveValuesLoRa();
 void IRAM_ATTR handleInterrupt();
 
+// --- Magic Bytes Config ---
+#define USE_MAGIC_BYTES 0 // Set to 0 to disable magic bytes
+static const uint8_t MAGIC_BYTES[3] = {0xAA, 0xBB, 0xCC}; // Example magic bytes
+const size_t MAGIC_BYTES_LEN = sizeof(MAGIC_BYTES);
+
+String addMagicBytes(const String& payload) {
+#if USE_MAGIC_BYTES
+  String result;
+  for (size_t i = 0; i < MAGIC_BYTES_LEN; ++i) {
+    result += (char)MAGIC_BYTES[i];
+  }
+  result += payload;
+  return result;
+#else
+  return payload;
+#endif
+}
+
 void setup()
 {
-  Serial.begin(56000);
+  Serial.begin(115200);
 #ifdef DEBUG
   delay(4000);
   Serial.println("START");
@@ -102,6 +120,8 @@ void setup()
   //Serial.println("Boot Nr.: " + String(bootCount));
   // esp_sleep_enable_timer_wakeup(90e+6);
   //  Startup all pins and UART
+// Initialize LoRa E32 before configuration
+e32ttl.begin();
 
 // Explizite Konfiguration setzen
 Configuration config;
@@ -111,15 +131,19 @@ config.CHAN = 0x06; // Kanal 7
 config.SPED.airDataRate = AIR_DATA_RATE_010_24; // 2.4kbps
 config.SPED.uartBaudRate = UART_BPS_9600;
 config.SPED.uartParity = MODE_00_8N1;
+// Ensure transparent transmission mode
 config.OPTION.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;
 config.OPTION.fec = FEC_1_ON; // Turn off Forward Error Correction Switch
 
+// Save configuration and check status
+ResponseStatus setCfgStatus = e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
+if (setCfgStatus.code != 1) {
+  Serial.print("Error setting configuration: ");
+  Serial.println(setCfgStatus.getResponseDescription());
+}
 
 delay(500);
 Serial.println("in setup routine");
-
-//  Startup all pins and UART
-e32ttl.begin();
 e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
 
    neopixelWrite(RGB_BUILTIN, 0, 0, 0); // BLUE
@@ -131,14 +155,18 @@ e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
   Configuration configuration = *(Configuration*) c.data;
   Serial.println(c.status.getResponseDescription());
   Serial.println(c.status.code);
-
-  printParameters(configuration) 
-  ;
+  // Print and check transmission mode
+  Serial.print("Fixed Transmission mode (should be 0 for transparent): ");
+  Serial.println(configuration.OPTION.fixedTransmission);
+  printParameters(configuration);
+  // Free the container to prevent memory leaks
+  c.close();
 
   Serial.println("Hi, I'm going to send message!");
 
-  // Send message
-   ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
+  // Send message without non-ASCII header
+  String msg = "Hello, world? "  + String(bootCount) + "!";
+  ResponseStatus rs = e32ttl.sendMessage(msg);
 }
 
 void loop()
@@ -147,15 +175,17 @@ void loop()
  
 
   ++bootCount;
-  delay(6000);
+  delay(3000);
   Serial.println("Hi, I'm going to send message!");
 
 
 
-  // Send message
-  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount) + "\n");
-   Serial.println("Wait for receiving a message");
-delay(6000);
+  // Send message without non-ASCII header
+  String msg = "Hello, world? "  + String(bootCount) + "!";
+
+  ResponseStatus rs = e32ttl.sendMessage(msg);
+  Serial.println("Wait for receiving a message");
+  delay(8000);
   receiveValuesLoRa(); 
   
 
