@@ -17,6 +17,7 @@ RainSensor
   History: master if not shown otherwise
   20250405  V0.1: Copy from RainSensor Project
   20250517  V0.2: Add receive function
+  20250721  V0.3: Recieve packed struct from LoRa and print it
 
 
 
@@ -27,9 +28,10 @@ RainSensor
 // 1 means debug on 0 means off
 #define DEBUG 1
 #include "LoRa_E32.h"
+#include "communication.h"
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "RainSensor V0.7";
+const String sSoftware = "LoraBridge V0.3";
 
 // debug macro
 #if DEBUG == 1
@@ -109,6 +111,7 @@ void setup()
 #ifdef DEBUG
   delay(4000);
   Serial.println("START");
+  Serial.print("Software Version: ");
   Serial.println(sSoftware);
 #endif
   // Serial1 connects to LoRa module
@@ -279,29 +282,48 @@ void IRAM_ATTR handleInterrupt() {
 
 void receiveValuesLoRa()
 {
-  // LORA_DATA_STRUCTURE sLoRaReceiveData;
-  //  If something available
   if (e32ttl.available() > 1)
   {
-    // read the String message
     ResponseContainer rc = e32ttl.receiveMessage();
- 
-    // Is something goes wrong print error
     if (rc.status.code != 1)
     {
-      rc.status.getResponseDescription();
+      Serial.print("LoRa receive error: ");
+      Serial.println(rc.status.getResponseDescription());
+      return;
     }
-    else
-    {
-      // Print the data received
-      Serial.println(rc.data);
-      neopixelWrite(RGB_BUILTIN, 0, 0, 0);
-      delay(500);
-      neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Off
-
-      
+    // Expect binary payload matching lora_payload_t
+    if (rc.data.length() != sizeof(lora_payload_t)) {
+      Serial.print("Error: Received payload size ");
+      Serial.print(rc.data.length());
+      Serial.print(" does not match expected size ");
+      Serial.println(sizeof(lora_payload_t));
+      return;
     }
-
-  
+    // Copy buffer into struct
+    lora_payload_t payload;
+    memcpy(&payload, rc.data.c_str(), sizeof(lora_payload_t));
+    // Validate checksum
+    uint16_t calc_checksum = lora_payload_checksum(&payload);
+    bool checksum_ok = (calc_checksum == payload.checksum);
+    // Print all fields
+    Serial.print("Elapsed time (string): ");
+    Serial.println(payload.elapsed_time_str);
+    Serial.print("Elapsed time (ms): ");
+    Serial.println(payload.elapsed_time_ms);
+    Serial.print("Pulse count: ");
+    Serial.println(payload.pulse_count);
+    Serial.print("Send counter: ");
+    Serial.println(payload.send_counter);
+    Serial.print("Checksum: 0x");
+    Serial.println((uint16_t)payload.checksum, HEX);
+    Serial.print("Checksum valid: ");
+    Serial.println(checksum_ok ? "YES" : "NO");
+    if (!checksum_ok) {
+      Serial.print("Expected checksum: 0x");
+      Serial.println(calc_checksum, HEX);
+    }
+    neopixelWrite(RGB_BUILTIN, 0, 0, 0);
+    delay(500);
+    neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Off
   }
 }
