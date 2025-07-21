@@ -28,7 +28,7 @@ RainSensor
 // 1 means debug on 0 means off
 #define DEBUG 1
 #include "LoRa_E32.h"
-#include "communication.h"
+#include "../../Rainsensor/include/communication.h"
 // Data structure for message
 #include <HomeAutomationCommon.h>
 const String sSoftware = "LoraBridge V0.3";
