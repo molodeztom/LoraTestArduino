@@ -165,39 +165,27 @@ e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
   // Free the container to prevent memory leaks
   c.close();
 
-  Serial.println("Hi, I'm going to send message!");
 
-  // Send message without non-ASCII header
-  String msg = "Hello, world? "  + String(bootCount) + "!";
-  ResponseStatus rs = e32ttl.sendMessage(msg);
 }
 
 void loop()
 {
-  
- 
-
-  ++bootCount;
-  delay(3000);
-  Serial.println("Hi, I'm going to send message!");
-
-
-
-  // Send message without non-ASCII header
-  String msg = "Hello, world? "  + String(bootCount) + "!";
-
-  ResponseStatus rs = e32ttl.sendMessage(msg);
-  Serial.println("Wait for receiving a message");
-  delay(8000);
-  receiveValuesLoRa(); 
-  
-
+  // Wait for a message from LoRa
+  bool messageReceived = false;
+  while (!messageReceived) {
+    if (e32ttl.available() > 1) {
+      receiveValuesLoRa();
+      messageReceived = true;
+    }
+    delay(100); // Small delay to avoid busy loop
   }
 
-
-
-
-
+  ++bootCount;
+  Serial.println("Hi, I'm going to send message!");
+  String msg = "Message received "  + String(bootCount) + "!";
+  ResponseStatus rs = e32ttl.sendMessage(msg);
+  Serial.println("Message sent. Waiting for next receive...");
+}
 
 void printParameters(struct Configuration configuration)
 {
