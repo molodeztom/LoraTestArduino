@@ -18,6 +18,7 @@ RainSensor
   20250405  V0.1: Copy from RainSensor Project
   20250517  V0.2: Add receive function
   20250721  V0.3: Recieve packed struct from LoRa and print it
+  20250724  V0.4: Wait little bit longer between receive and send
 
 
 
@@ -31,7 +32,7 @@ RainSensor
 #include "../../Rainsensor/include/communication.h"
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "LoraBridge V0.3";
+const String sSoftware = "LoraBridge V0.4";
 
 // debug macro
 #if DEBUG == 1
@@ -179,7 +180,7 @@ void loop()
     }
     delay(100); // Small delay to avoid busy loop
   }
-
+delay(1000); // Wait a bit before sending the next message
   ++bootCount;
   Serial.println("Hi, I'm going to send message!");
   String msg = "Message received "  + String(bootCount) + "!";
