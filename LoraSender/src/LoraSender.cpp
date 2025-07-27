@@ -19,6 +19,7 @@ RainSensor
   20250517  V0.2: Add receive function
   20250721  V0.3: Recieve packed struct from LoRa and print it
   20250724  V0.4: Wait little bit longer between receive and send
+  20250727  V0.5: New payload
 
 
 
@@ -32,7 +33,7 @@ RainSensor
 #include "../../Rainsensor/include/communication.h"
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "LoraBridge V0.4";
+const String sSoftware = "LoraBridge V0.5";
 
 // debug macro
 #if DEBUG == 1
@@ -87,6 +88,7 @@ void sendValuesLoRa();
 void sendSingleData(LORA_DATA_STRUCTURE data);
 void receiveValuesLoRa();
 void IRAM_ATTR handleInterrupt();
+static void format_time(uint32_t ms, int *hours, int *minutes, int *seconds);
 
 // --- Magic Bytes Config ---
 #define USE_MAGIC_BYTES 0 // Set to 0 to disable magic bytes
@@ -271,6 +273,9 @@ void IRAM_ATTR handleInterrupt() {
 
 void receiveValuesLoRa()
 {
+      uint32_t ms = 0;
+    int hours = 0, minutes = 0, seconds = 0;
+        char elapsed_time_str[9];  
   if (e32ttl.available() > 1)
   {
     ResponseContainer rc = e32ttl.receiveMessage();
@@ -294,15 +299,21 @@ void receiveValuesLoRa()
     // Validate checksum
     uint16_t calc_checksum = lora_payload_checksum(&payload);
     bool checksum_ok = (calc_checksum == payload.checksum);
+//calculate elapsed time to string
+Serial.print("Calculated time string: ");
+format_time(payload.elapsed_time_ms, &hours, &minutes, &seconds);
+    snprintf(elapsed_time_str, sizeof(elapsed_time_str), "%02d:%02d:%02d", hours, minutes, seconds);
+    Serial.println(elapsed_time_str);
+
     // Print all fields
-    Serial.print("Elapsed time (string): ");
-    Serial.println(payload.elapsed_time_str);
-    Serial.print("Elapsed time (ms): ");
+    Serial.print("Message ID: ");
+    Serial.println(payload.messageID);
+    Serial.print("Event ID: "); 
+    Serial.println(payload.lora_eventID);
+      Serial.print("Elapsed time (ms): ");
     Serial.println(payload.elapsed_time_ms);
     Serial.print("Pulse count: ");
     Serial.println(payload.pulse_count);
-    Serial.print("Send counter: ");
-    Serial.println(payload.send_counter);
     Serial.print("Checksum: 0x");
     Serial.println((uint16_t)payload.checksum, HEX);
     Serial.print("Checksum valid: ");
@@ -315,4 +326,12 @@ void receiveValuesLoRa()
     delay(500);
     neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Off
   }
+}
+
+// Function to convert milliseconds into hours, minutes, and seconds
+static void format_time(uint32_t ms, int *hours, int *minutes, int *seconds)
+{
+    *hours = ms / 3600000;             // Calculate hours (ms / 3600000)
+    *minutes = (ms % 3600000) / 60000; // Calculate minutes ((ms % 3600000) / 60000)
+    *seconds = (ms % 60000) / 1000;    // Calculate seconds ((ms % 60000) / 1000)
 }
