@@ -20,6 +20,7 @@ RainSensor
   20250721  V0.3: Recieve packed struct from LoRa and print it
   20250724  V0.4: Wait little bit longer between receive and send
   20250727  V0.5: New payload
+  20250804  V0.6: Send lora_payload_t struct, no terminator
 
 
 
@@ -185,7 +186,20 @@ void loop()
 delay(1000); // Wait a bit before sending the next message
   ++bootCount;
   Serial.println("Hi, I'm going to send message!");
-  String msg = "Message received "  + String(bootCount) + "!";
+  lora_payload_t payload;
+payload.messageID = bootCount;
+payload.lora_eventID = 0x02;
+  payload.elapsed_time_ms = millis();
+  payload.pulse_count = interruptCounter; 
+  payload.checksum = lora_payload_checksum(&payload); // Calculate checksum
+  String msg = String((char*)&payload, sizeof(payload)); // Convert struct to String
+ //msg = msg + "!";
+
+  //String msg = "Message received "  + String(bootCount) + "!";
+  
+  
+  
+  
   ResponseStatus rs = e32ttl.sendMessage(msg);
   Serial.println("Message sent. Waiting for next receive...");
 }
