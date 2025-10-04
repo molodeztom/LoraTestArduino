@@ -21,6 +21,7 @@ RainSensor
   20250724  V0.4: Wait little bit longer between receive and send
   20250727  V0.5: New payload
   20250804  V0.6: Send lora_payload_t struct, no terminator
+  20251004  V0.7: Send payload with 2  delimiters, changed method to generate send string, debugHex Print for message sent. Receive length + 2 for delimiter 
 
 
 
@@ -34,7 +35,7 @@ RainSensor
 #include "../../Rainsensor/include/communication.h"
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "LoraBridge V0.5";
+const String sSoftware = "LoraBridge V0.7";
 
 // debug macro
 #if DEBUG == 1
@@ -58,7 +59,7 @@ const String sSoftware = "LoraBridge V0.5";
 /***************************
  * Pin Settings
  **************************/
-//Hall sensor
+// Hall sensor
 const byte HSENSD = GPIO_NUM_8;
 // LORA module
 const byte M0 = GPIO_NUM_10;  // LoRa M0
@@ -68,11 +69,10 @@ const byte RxD = GPIO_NUM_13; // RX to LoRa Tx
 const byte AUX = GPIO_NUM_14; // Auxiliary
 const int ChannelNumber = 6;
 
-
 // global data
 
 float fTemp, fRelHum, fRainMM;
-volatile int interruptCounter  = 0; //indicator an interrupt has occured
+volatile int interruptCounter = 0; // indicator an interrupt has occured
 int numberOfInterrupts = 0;
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -90,16 +90,19 @@ void sendSingleData(LORA_DATA_STRUCTURE data);
 void receiveValuesLoRa();
 void IRAM_ATTR handleInterrupt();
 static void format_time(uint32_t ms, int *hours, int *minutes, int *seconds);
+void printPayloadHex(const uint8_t *data, size_t len);
 
 // --- Magic Bytes Config ---
-#define USE_MAGIC_BYTES 0 // Set to 0 to disable magic bytes
+#define USE_MAGIC_BYTES 0                                 // Set to 0 to disable magic bytes
 static const uint8_t MAGIC_BYTES[3] = {0xAA, 0xBB, 0xCC}; // Example magic bytes
 const size_t MAGIC_BYTES_LEN = sizeof(MAGIC_BYTES);
 
-String addMagicBytes(const String& payload) {
+String addMagicBytes(const String &payload)
+{
 #if USE_MAGIC_BYTES
   String result;
-  for (size_t i = 0; i < MAGIC_BYTES_LEN; ++i) {
+  for (size_t i = 0; i < MAGIC_BYTES_LEN; ++i)
+  {
     result += (char)MAGIC_BYTES[i];
   }
   result += payload;
@@ -121,45 +124,46 @@ void setup()
   // Serial1 connects to LoRa module
   Serial1.begin(9600, SERIAL_8N1, RxD, TxD);
   delay(500);
-    Serial.println("in setup routine");
-    pinMode(HSENSD, INPUT_PULLUP);
- // attachInterrupt(digitalPinToInterrupt(HSENSD), handleInterrupt, CHANGE);
-  //Serial.println("Boot Nr.: " + String(bootCount));
+  Serial.println("in setup routine");
+  pinMode(HSENSD, INPUT_PULLUP);
+  // attachInterrupt(digitalPinToInterrupt(HSENSD), handleInterrupt, CHANGE);
+  // Serial.println("Boot Nr.: " + String(bootCount));
   // esp_sleep_enable_timer_wakeup(90e+6);
   //  Startup all pins and UART
-// Initialize LoRa E32 before configuration
-e32ttl.begin();
+  // Initialize LoRa E32 before configuration
+  e32ttl.begin();
 
-// Explizite Konfiguration setzen
-Configuration config;
-config.ADDH = 0x00;
-config.ADDL = 0x00;
-config.CHAN = 0x06; // Kanal 7
-config.SPED.airDataRate = AIR_DATA_RATE_010_24; // 2.4kbps
-config.SPED.uartBaudRate = UART_BPS_9600;
-config.SPED.uartParity = MODE_00_8N1;
-// Ensure transparent transmission mode
-config.OPTION.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;
-config.OPTION.fec = FEC_1_ON; // Turn off Forward Error Correction Switch
+  // Explizite Konfiguration setzen
+  Configuration config;
+  config.ADDH = 0x00;
+  config.ADDL = 0x00;
+  config.CHAN = 0x06;                             // Kanal 7
+  config.SPED.airDataRate = AIR_DATA_RATE_010_24; // 2.4kbps
+  config.SPED.uartBaudRate = UART_BPS_9600;
+  config.SPED.uartParity = MODE_00_8N1;
+  // Ensure transparent transmission mode
+  config.OPTION.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;
+  config.OPTION.fec = FEC_1_ON; // Turn off Forward Error Correction Switch
 
-// Save configuration and check status
-ResponseStatus setCfgStatus = e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
-if (setCfgStatus.code != 1) {
-  Serial.print("Error setting configuration: ");
-  Serial.println(setCfgStatus.getResponseDescription());
-}
+  // Save configuration and check status
+  ResponseStatus setCfgStatus = e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
+  if (setCfgStatus.code != 1)
+  {
+    Serial.print("Error setting configuration: ");
+    Serial.println(setCfgStatus.getResponseDescription());
+  }
 
-delay(500);
-Serial.println("in setup routine");
-e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
+  delay(500);
+  Serial.println("in setup routine");
+  e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
 
-   neopixelWrite(RGB_BUILTIN, 0, 0, 0); // BLUE
+  neopixelWrite(RGB_BUILTIN, 0, 0, 0); // BLUE
   fRainMM = 0;
   delay(500);
   ResponseStructContainer c;
   c = e32ttl.getConfiguration();
   // It's important get configuration pointer before all other operation
-  Configuration configuration = *(Configuration*) c.data;
+  Configuration configuration = *(Configuration *)c.data;
   Serial.println(c.status.getResponseDescription());
   Serial.println(c.status.code);
   // Print and check transmission mode
@@ -168,39 +172,49 @@ e32ttl.setConfiguration(config, WRITE_CFG_PWR_DWN_SAVE);
   printParameters(configuration);
   // Free the container to prevent memory leaks
   c.close();
-
-
 }
 
 void loop()
 {
   // Wait for a message from LoRa
   bool messageReceived = false;
-  while (!messageReceived) {
-    if (e32ttl.available() > 1) {
+  while (!messageReceived)
+  {
+    if (e32ttl.available() > 1)
+    {
       receiveValuesLoRa();
       messageReceived = true;
     }
     delay(100); // Small delay to avoid busy loop
   }
-delay(1000); // Wait a bit before sending the next message
+  delay(10); // Wait a bit before sending the next message
   ++bootCount;
   Serial.println("Hi, I'm going to send message!");
   lora_payload_t payload;
-payload.messageID = bootCount;
-payload.lora_eventID = 0x02;
+  payload.messageID = bootCount;
+  payload.lora_eventID = 0x02;
   payload.elapsed_time_ms = millis();
-  payload.pulse_count = interruptCounter; 
-  payload.checksum = lora_payload_checksum(&payload); // Calculate checksum
-  String msg = String((char*)&payload, sizeof(payload)); // Convert struct to String
- //msg = msg + "!";
+  payload.pulse_count = interruptCounter;
+  payload.checksum = lora_payload_checksum(&payload);     // Calculate checksum
 
-  //String msg = "Message received "  + String(bootCount) + "!";
-  
-  
-  
-  
+    // 2) Binärdaten in String sicher verpacken (Byte-für-Byte)
+  String msg;
+  msg.reserve(sizeof(payload) + 2); // +2 für die Delimiter
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(&payload);
+  for (size_t i = 0; i < sizeof(payload); ++i) {
+    msg += (char)p[i];  // explizit jedes Byte anhängen (inkl. 0x00)
+  }
+
+  // 3) Delimiter *danach* anhängen (Empfänger wartet darauf)
+  msg += (char)E32_MSG_DELIMITER_1;
+  msg += (char)E32_MSG_DELIMITER_2;
+
+ 
   ResponseStatus rs = e32ttl.sendMessage(msg);
+
+  Serial.print("message sent: ");
+
+printPayloadHex((const uint8_t*)msg.c_str(), msg.length());
   Serial.println("Message sent. Waiting for next receive...");
 }
 
@@ -278,18 +292,18 @@ void printModuleInformation(struct ModuleInformation moduleInformation)
   Serial.println(moduleInformation.features, HEX);
   Serial.println("----------------------------------------");
 }
-void IRAM_ATTR handleInterrupt() {
+void IRAM_ATTR handleInterrupt()
+{
   portENTER_CRITICAL_ISR(&mux);
   interruptCounter++;
   portEXIT_CRITICAL_ISR(&mux);
 }
 
-
 void receiveValuesLoRa()
 {
-      uint32_t ms = 0;
-    int hours = 0, minutes = 0, seconds = 0;
-        char elapsed_time_str[9];  
+  uint32_t ms = 0;
+  int hours = 0, minutes = 0, seconds = 0;
+  char elapsed_time_str[9];
   if (e32ttl.available() > 1)
   {
     ResponseContainer rc = e32ttl.receiveMessage();
@@ -300,7 +314,8 @@ void receiveValuesLoRa()
       return;
     }
     // Expect binary payload matching lora_payload_t
-    if (rc.data.length() != sizeof(lora_payload_t)) {
+    if (rc.data.length() != sizeof(lora_payload_t) + 2) // Account for 2 byte delimiter
+    {
       Serial.print("Error: Received payload size ");
       Serial.print(rc.data.length());
       Serial.print(" does not match expected size ");
@@ -313,18 +328,18 @@ void receiveValuesLoRa()
     // Validate checksum
     uint16_t calc_checksum = lora_payload_checksum(&payload);
     bool checksum_ok = (calc_checksum == payload.checksum);
-//calculate elapsed time to string
-Serial.print("Calculated time string: ");
-format_time(payload.elapsed_time_ms, &hours, &minutes, &seconds);
+    // calculate elapsed time to string
+    Serial.print("Calculated time string: ");
+    format_time(payload.elapsed_time_ms, &hours, &minutes, &seconds);
     snprintf(elapsed_time_str, sizeof(elapsed_time_str), "%02d:%02d:%02d", hours, minutes, seconds);
     Serial.println(elapsed_time_str);
 
     // Print all fields
     Serial.print("Message ID: ");
     Serial.println(payload.messageID);
-    Serial.print("Event ID: "); 
+    Serial.print("Event ID: ");
     Serial.println(payload.lora_eventID);
-      Serial.print("Elapsed time (ms): ");
+    Serial.print("Elapsed time (ms): ");
     Serial.println(payload.elapsed_time_ms);
     Serial.print("Pulse count: ");
     Serial.println(payload.pulse_count);
@@ -332,7 +347,8 @@ format_time(payload.elapsed_time_ms, &hours, &minutes, &seconds);
     Serial.println((uint16_t)payload.checksum, HEX);
     Serial.print("Checksum valid: ");
     Serial.println(checksum_ok ? "YES" : "NO");
-    if (!checksum_ok) {
+    if (!checksum_ok)
+    {
       Serial.print("Expected checksum: 0x");
       Serial.println(calc_checksum, HEX);
     }
@@ -345,7 +361,23 @@ format_time(payload.elapsed_time_ms, &hours, &minutes, &seconds);
 // Function to convert milliseconds into hours, minutes, and seconds
 static void format_time(uint32_t ms, int *hours, int *minutes, int *seconds)
 {
-    *hours = ms / 3600000;             // Calculate hours (ms / 3600000)
-    *minutes = (ms % 3600000) / 60000; // Calculate minutes ((ms % 3600000) / 60000)
-    *seconds = (ms % 60000) / 1000;    // Calculate seconds ((ms % 60000) / 1000)
+  *hours = ms / 3600000;             // Calculate hours (ms / 3600000)
+  *minutes = (ms % 3600000) / 60000; // Calculate minutes ((ms % 3600000) / 60000)
+  *seconds = (ms % 60000) / 1000;    // Calculate seconds ((ms % 60000) / 1000)
+}
+
+void printPayloadHex(const uint8_t *data, size_t len)
+{
+  Serial.print("Payload [");
+  Serial.print(len);
+  Serial.println(" bytes]:");
+
+  for (size_t i = 0; i < len; i++)
+  {
+    if (data[i] < 0x10)
+      Serial.print('0'); // führende Null
+    Serial.print(data[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
 }
