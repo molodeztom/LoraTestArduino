@@ -97,6 +97,10 @@ void printPayloadHex(const uint8_t *data, size_t len);
 static const uint8_t MAGIC_BYTES[3] = {0xAA, 0xBB, 0xCC}; // Example magic bytes
 const size_t MAGIC_BYTES_LEN = sizeof(MAGIC_BYTES);
 
+// Message delimiter constants
+#define E32_MSG_DELIMITER_1 0x0C    // First byte of message delimiter
+#define E32_MSG_DELIMITER_2 0x0C    // Second byte of message delimiter
+
 String addMagicBytes(const String &payload)
 {
 #if USE_MAGIC_BYTES
