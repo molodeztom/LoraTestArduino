@@ -196,7 +196,7 @@ void loop()
   Serial.println("Hi, I'm going to send message!");
   lora_payload_t payload;
   payload.messageID = bootCount;
-  payload.lora_eventID = 0x02;
+  payload.lora_eventID = LORA_EVENT_RESUME_SLEEP_MODE;
   payload.elapsed_time_ms = millis();
   payload.pulse_count = interruptCounter;
   payload.checksum = lora_payload_checksum(&payload);     // Calculate checksum
