@@ -21,13 +21,17 @@ RainSensor
   20250724  V0.4: Wait little bit longer between receive and send
   20250727  V0.5: New payload
   20250804  V0.6: Send lora_payload_t struct, no terminator
-  20251004  V0.7: Send payload with 2  delimiters, changed method to generate send string, debugHex Print for message sent. Receive length + 2 for delimiter 
+  20251004  V0.7: Send payload with 2  delimiters, changed method to generate send string, debugHex Print for message sent. Receive length + 2 for delimiter
+  20260219  V0.8: Add event cycling with configurable timer and names
+  20260219  V0.9: Fix swapped event codes and debug output names
+  20260219  V0.10: Correct event codes to match communicationold.h
+  20260221  V0.11: Add send_config function
 
 
 
 
 */
-
+ 
 #include <Arduino.h>
 // 1 means debug on 0 means off
 #define DEBUG 1
@@ -35,7 +39,7 @@ RainSensor
 #include "../../Rainsensor/include/communication.h"
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "LoraBridge V0.7";
+const String sSoftware = "LoraBridge V0.10";
 
 // debug macro
 #if DEBUG == 1
@@ -75,6 +79,28 @@ float fTemp, fRelHum, fRainMM;
 volatile int interruptCounter = 0; // indicator an interrupt has occured
 int numberOfInterrupts = 0;
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+// --- Event ID Configuration ---
+// List of event IDs to cycle through during testing
+// Edit this list to change which events are sent
+const uint8_t eventIdList[] = {
+  0x0001,  // LORA_EVENT_RESUME_SLEEP_MODE (or use actual enum value)
+  0x0002   // LORA_EVENT_DISABLE_SLEEP_MODE (or use actual enum value)
+};
+
+// Event names for logging
+const char* eventNameList[] = {
+  "RESUME_SLEEP_MODE",
+  "DISABLE_SLEEP_MODE"
+};
+
+const size_t eventIdListSize = sizeof(eventIdList) / sizeof(eventIdList[0]);
+size_t currentEventIndex = 1;
+
+// Timer configuration for event switching (in seconds)
+// Edit this value to change how often events are switched
+const unsigned long EVENT_SWITCH_INTERVAL_SECONDS = 30; // Change event every 5 seconds
+unsigned long lastEventSwitchTime = 0;
 
 // set LoRa to working mode 0  Transmitting
 // LoRa_E32 e32ttl(RxD, TxD,AUX, M0, M1, UART_BPS_9600);
@@ -184,6 +210,21 @@ void loop()
   bool messageReceived = false;
   while (!messageReceived)
   {
+    // Check if it's time to switch to the next event
+    unsigned long currentTime = millis() / 1000; // Convert to seconds
+    if (currentTime - lastEventSwitchTime >= EVENT_SWITCH_INTERVAL_SECONDS)
+    {
+      lastEventSwitchTime = currentTime;
+      //currentEventIndex = (currentEventIndex + 1) % eventIdListSize;
+      Serial.print("Switching to event index: ");
+      Serial.print(currentEventIndex);
+      Serial.print(", Event ID: 0x");
+      Serial.print(eventIdList[currentEventIndex], HEX);
+      Serial.print(", Event Name: ");
+      Serial.println(eventNameList[currentEventIndex]);
+    }
+
+    // Check for incoming LoRa message
     if (e32ttl.available() > 1)
     {
       receiveValuesLoRa();
@@ -191,12 +232,14 @@ void loop()
     }
     delay(100); // Small delay to avoid busy loop
   }
+  
   delay(10); // Wait a bit before sending the next message
   ++bootCount;
   Serial.println("Hi, I'm going to send message!");
   lora_payload_t payload;
   payload.messageID = bootCount;
-  payload.lora_eventID = LORA_EVENT_RESUME_SLEEP_MODE;
+  // Use the current event from the list
+  payload.lora_eventID = eventIdList[currentEventIndex];
   payload.elapsed_time_ms = millis();
   payload.pulse_count = interruptCounter;
   payload.checksum = lora_payload_checksum(&payload);     // Calculate checksum
