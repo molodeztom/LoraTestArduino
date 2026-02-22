@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 
 #define LORA_EVENT_RESUME_SLEEP_MODE    0x0001  // Received message: resume normal sleep mode (allow deep sleep)
 #define LORA_EVENT_DISABLE_SLEEP_MODE   0x0002  // Received message: disable sleep mode (stay awake)
