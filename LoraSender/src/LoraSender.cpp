@@ -26,6 +26,7 @@ RainSensor
   20260219  V0.9: Fix swapped event codes and debug output names
   20260219  V0.10: Correct event codes to match communicationold.h
   20260221  V0.11: Add send_config function
+  20260222  V0.12: Remove menu function, add config variables at top
 
 
 
@@ -36,10 +37,10 @@ RainSensor
 // 1 means debug on 0 means off
 #define DEBUG 1
 #include "LoRa_E32.h"
-#include "../../Rainsensor/include/communication.h"
+#include "communication.h"
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "LoraBridge V0.10";
+const String sSoftware = "LoraBridge V0.12";
 
 // debug macro
 #if DEBUG == 1
@@ -72,6 +73,22 @@ const byte TxD = GPIO_NUM_12; // TX to LoRa Rx
 const byte RxD = GPIO_NUM_13; // RX to LoRa Tx
 const byte AUX = GPIO_NUM_14; // Auxiliary
 const int ChannelNumber = 6;
+
+/***************************
+ * CONFIGURATION VARIABLES
+ * Edit these values and recompile to change configuration
+ **************************/
+// Configuration values to send to receiver
+uint8_t CONFIG_ULP_PULSES = 10;           // ULP pulses (1-255)
+uint16_t CONFIG_WAKEUP_SEC = 60;          // Wakeup interval in seconds (1-3600)
+uint16_t CONFIG_SHUTDOWN_MS = 1000;       // Shutdown delay in ms (100-10000)
+uint16_t CONFIG_LORA_DELAY_MS = 500;      // LoRa receive delay in ms (100-5000)
+
+// Set to true to send SET_CONFIG message, false to send normal data
+bool SEND_CONFIG_MESSAGE = false;
+
+// Set to true to send RESET_CONFIG message
+bool SEND_RESET_CONFIG = false;
 
 // global data
 
@@ -118,6 +135,11 @@ void IRAM_ATTR handleInterrupt();
 static void format_time(uint32_t ms, int *hours, int *minutes, int *seconds);
 void printPayloadHex(const uint8_t *data, size_t len);
 
+// Configuration message functions
+void sendConfigMessage();
+void sendResetConfigMessage();
+void printConfigPayloadHex(const uint8_t *data, size_t len);
+
 // --- Magic Bytes Config ---
 #define USE_MAGIC_BYTES 0                                 // Set to 0 to disable magic bytes
 static const uint8_t MAGIC_BYTES[3] = {0xAA, 0xBB, 0xCC}; // Example magic bytes
@@ -126,6 +148,8 @@ const size_t MAGIC_BYTES_LEN = sizeof(MAGIC_BYTES);
 // Message delimiter constants
 #define E32_MSG_DELIMITER_1 0x0C    // First byte of message delimiter
 #define E32_MSG_DELIMITER_2 0x0C    // Second byte of message delimiter
+
+uint16_t messageIdCounter = 1;
 
 String addMagicBytes(const String &payload)
 {
@@ -206,7 +230,23 @@ void setup()
 
 void loop()
 {
-  // Wait for a message from LoRa
+  // Check if we should send a config message
+  if (SEND_CONFIG_MESSAGE) {
+    sendConfigMessage();
+    SEND_CONFIG_MESSAGE = false;  // Reset flag after sending
+    delay(1000);
+    return;
+  }
+
+  // Check if we should send a reset config message
+  if (SEND_RESET_CONFIG) {
+    sendResetConfigMessage();
+    SEND_RESET_CONFIG = false;  // Reset flag after sending
+    delay(1000);
+    return;
+  }
+
+  // Normal operation: Wait for a message from LoRa
   bool messageReceived = false;
   while (!messageReceived)
   {
@@ -230,6 +270,7 @@ void loop()
       receiveValuesLoRa();
       messageReceived = true;
     }
+
     delay(100); // Small delay to avoid busy loop
   }
   
@@ -256,7 +297,7 @@ void loop()
   msg += (char)E32_MSG_DELIMITER_1;
   msg += (char)E32_MSG_DELIMITER_2;
 
- 
+  
   ResponseStatus rs = e32ttl.sendMessage(msg);
 
   Serial.print("message sent: ");
@@ -423,6 +464,135 @@ void printPayloadHex(const uint8_t *data, size_t len)
   {
     if (data[i] < 0x10)
       Serial.print('0'); // führende Null
+    Serial.print(data[i], HEX);
+    Serial.print(' ');
+  }
+  Serial.println();
+}
+
+/* ============================================================================
+ * CONFIGURATION MESSAGE FUNCTIONS
+ * ============================================================================ */
+
+/**
+ * @brief Send configuration message with current values
+ */
+void sendConfigMessage()
+{
+  Serial.println("\nSending SET_CONFIG message...");
+
+  lora_config_payload_t config;
+  config.messageID = messageIdCounter++;
+  config.lora_eventID = LORA_EVENT_SET_CONFIG;
+  config.ulp_pulses_to_wake_up = CONFIG_ULP_PULSES;
+  config.reserved1 = 0;
+  config.wakeup_interval_sec = CONFIG_WAKEUP_SEC;
+  config.shutdown_delay_ms = CONFIG_SHUTDOWN_MS;
+  config.lora_receive_delay_ms = CONFIG_LORA_DELAY_MS;
+  config.reserved2 = 0;
+  config.checksum = lora_config_payload_checksum(&config);
+
+  // Log configuration
+  Serial.println("Configuration payload:");
+  Serial.print("  messageID: ");
+  Serial.println(config.messageID);
+  Serial.print("  eventID: 0x");
+  Serial.println(config.lora_eventID, HEX);
+  Serial.print("  ulp_pulses: ");
+  Serial.println(config.ulp_pulses_to_wake_up);
+  Serial.print("  wakeup_sec: ");
+  Serial.println(config.wakeup_interval_sec);
+  Serial.print("  shutdown_ms: ");
+  Serial.println(config.shutdown_delay_ms);
+  Serial.print("  lora_delay_ms: ");
+  Serial.println(config.lora_receive_delay_ms);
+  Serial.print("  checksum: 0x");
+  Serial.println(config.checksum, HEX);
+
+  // Pack into message with delimiters
+  String msg;
+  msg.reserve(sizeof(config) + 2);
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(&config);
+  for (size_t i = 0; i < sizeof(config); ++i) {
+    msg += (char)p[i];
+  }
+  msg += (char)E32_MSG_DELIMITER_1;
+  msg += (char)E32_MSG_DELIMITER_2;
+
+  // Send message
+  ResponseStatus rs = e32ttl.sendMessage(msg);
+  if (rs.code == 1) {
+    Serial.println("SET_CONFIG message sent successfully.");
+    Serial.print("Payload hex: ");
+    printConfigPayloadHex((const uint8_t*)msg.c_str(), msg.length());
+  } else {
+    Serial.print("ERROR sending SET_CONFIG: ");
+    Serial.println(rs.getResponseDescription());
+  }
+}
+
+/**
+ * @brief Send reset configuration message
+ */
+void sendResetConfigMessage()
+{
+  Serial.println("\nSending RESET_CONFIG message...");
+
+  lora_config_payload_t config;
+  config.messageID = messageIdCounter++;
+  config.lora_eventID = LORA_EVENT_RESET_CONFIG;
+  config.ulp_pulses_to_wake_up = 0;  // Not used for reset
+  config.reserved1 = 0;
+  config.wakeup_interval_sec = 0;    // Not used for reset
+  config.shutdown_delay_ms = 0;      // Not used for reset
+  config.lora_receive_delay_ms = 0;  // Not used for reset
+  config.reserved2 = 0;
+  config.checksum = lora_config_payload_checksum(&config);
+
+  // Log configuration
+  Serial.println("Reset configuration payload:");
+  Serial.print("  messageID: ");
+  Serial.println(config.messageID);
+  Serial.print("  eventID: 0x");
+  Serial.println(config.lora_eventID, HEX);
+  Serial.print("  checksum: 0x");
+  Serial.println(config.checksum, HEX);
+
+  // Pack into message with delimiters
+  String msg;
+  msg.reserve(sizeof(config) + 2);
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(&config);
+  for (size_t i = 0; i < sizeof(config); ++i) {
+    msg += (char)p[i];
+  }
+  msg += (char)E32_MSG_DELIMITER_1;
+  msg += (char)E32_MSG_DELIMITER_2;
+
+  // Send message
+  ResponseStatus rs = e32ttl.sendMessage(msg);
+  if (rs.code == 1) {
+    Serial.println("RESET_CONFIG message sent successfully.");
+    Serial.print("Payload hex: ");
+    printConfigPayloadHex((const uint8_t*)msg.c_str(), msg.length());
+  } else {
+    Serial.print("ERROR sending RESET_CONFIG: ");
+    Serial.println(rs.getResponseDescription());
+  }
+}
+
+/**
+ * @brief Print configuration payload in hex format
+ */
+void printConfigPayloadHex(const uint8_t *data, size_t len)
+{
+  Serial.print("Config Payload [");
+  Serial.print(len);
+  Serial.println(" bytes]:");
+
+  for (size_t i = 0; i < len; i++)
+  {
+    if (data[i] < 0x10)
+      Serial.print('0');
     Serial.print(data[i], HEX);
     Serial.print(' ');
   }
