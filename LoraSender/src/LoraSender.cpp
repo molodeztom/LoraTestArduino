@@ -27,6 +27,7 @@ RainSensor
   20260219  V0.10: Correct event codes to match communicationold.h
   20260221  V0.11: Add send_config function
   20260222  V0.12: Remove menu function, add config variables at top
+  20260311  V0.13: Add send_config function and counter to delay send config
 
 
 
@@ -37,10 +38,13 @@ RainSensor
 // 1 means debug on 0 means off
 #define DEBUG 1
 #include "LoRa_E32.h"
-#include "communication.h"
+
+#include "communication.h"  //Now same file as RainSensor uses
+
+
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "LoraBridge V0.12";
+const String sSoftware = "LoraBridge V0.13";
 
 // debug macro
 #if DEBUG == 1
@@ -79,12 +83,17 @@ const int ChannelNumber = 6;
  * Edit these values and recompile to change configuration
  **************************/
 // Configuration values to send to receiver
-uint8_t CONFIG_ULP_PULSES = 10;           // ULP pulses (1-255)
+uint8_t CONFIG_ULP_PULSES = 12;           // ULP pulses (1-255)
 uint16_t CONFIG_WAKEUP_SEC = 60;          // Wakeup interval in seconds (1-3600)
 uint16_t CONFIG_SHUTDOWN_MS = 1000;       // Shutdown delay in ms (100-10000)
 uint16_t CONFIG_LORA_DELAY_MS = 500;      // LoRa receive delay in ms (100-5000)
 
-// Set to true to send SET_CONFIG message, false to send normal data
+// Configuration message timing control
+// Defines after how many normal messages a config message should be sent
+// Valid range: 1-65535 (uint16_t max), 0 disables automatic config sending
+const uint16_t CONFIG_MSG_INTERVAL = 5;   // Send config every N messages (0=disabled)
+int configMessageCounter = 0;            // Counter for config message interval
+// Runtime control flags - Set to true to send config messages
 bool SEND_CONFIG_MESSAGE = false;
 
 // Set to true to send RESET_CONFIG message
@@ -230,10 +239,13 @@ void setup()
 
 void loop()
 {
+  
+ if(configMessageCounter > CONFIG_MSG_INTERVAL) SEND_CONFIG_MESSAGE = true;
   // Check if we should send a config message
   if (SEND_CONFIG_MESSAGE) {
     sendConfigMessage();
     SEND_CONFIG_MESSAGE = false;  // Reset flag after sending
+    configMessageCounter = 0;
     delay(1000);
     return;
   }
@@ -243,6 +255,7 @@ void loop()
     sendResetConfigMessage();
     SEND_RESET_CONFIG = false;  // Reset flag after sending
     delay(1000);
+    configMessageCounter = 0;
     return;
   }
 
@@ -250,7 +263,7 @@ void loop()
   bool messageReceived = false;
   while (!messageReceived)
   {
-    // Check if it's time to switch to the next event
+/*     // Check if it's time to switch to the next event
     unsigned long currentTime = millis() / 1000; // Convert to seconds
     if (currentTime - lastEventSwitchTime >= EVENT_SWITCH_INTERVAL_SECONDS)
     {
@@ -262,7 +275,7 @@ void loop()
       Serial.print(eventIdList[currentEventIndex], HEX);
       Serial.print(", Event Name: ");
       Serial.println(eventNameList[currentEventIndex]);
-    }
+    } */
 
     // Check for incoming LoRa message
     if (e32ttl.available() > 1)
@@ -276,11 +289,12 @@ void loop()
   
   delay(10); // Wait a bit before sending the next message
   ++bootCount;
+  ++configMessageCounter;
   Serial.println("Hi, I'm going to send message!");
   lora_payload_t payload;
   payload.messageID = bootCount;
   // Use the current event from the list
-  payload.lora_eventID = eventIdList[currentEventIndex];
+  payload.lora_eventID = LORA_ACK;
   payload.elapsed_time_ms = millis();
   payload.pulse_count = interruptCounter;
   payload.checksum = lora_payload_checksum(&payload);     // Calculate checksum
