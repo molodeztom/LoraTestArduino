@@ -28,6 +28,8 @@ RainSensor
   20260221  V0.11: Add send_config function
   20260222  V0.12: Remove menu function, add config variables at top
   20260311  V0.13: Add send_config function and counter to delay send config
+  20260312  V0.14: Extract ACK message send to sendAckMessage() function
+  20260312  V0.15: Call sendAckMessage only if no config messages sent
 
 
 
@@ -44,7 +46,7 @@ RainSensor
 
 // Data structure for message
 #include <HomeAutomationCommon.h>
-const String sSoftware = "LoraBridge V0.13";
+const String sSoftware = "LoraBridge V0.15";
 
 // debug macro
 #if DEBUG == 1
@@ -143,6 +145,7 @@ void receiveValuesLoRa();
 void IRAM_ATTR handleInterrupt();
 static void format_time(uint32_t ms, int *hours, int *minutes, int *seconds);
 void printPayloadHex(const uint8_t *data, size_t len);
+void sendAckMessage();
 
 // Configuration message functions
 void sendConfigMessage();
@@ -239,85 +242,61 @@ void setup()
 
 void loop()
 {
-  
- if(configMessageCounter > CONFIG_MSG_INTERVAL) SEND_CONFIG_MESSAGE = true;
-  // Check if we should send a config message
-  if (SEND_CONFIG_MESSAGE) {
-    sendConfigMessage();
-    SEND_CONFIG_MESSAGE = false;  // Reset flag after sending
-    configMessageCounter = 0;
-    delay(1000);
-    return;
-  }
+   Serial.println("Loop Start");
+ 
+   if(configMessageCounter > CONFIG_MSG_INTERVAL) SEND_CONFIG_MESSAGE = true;
+   // Check if we should send a config message
+   if (SEND_CONFIG_MESSAGE) {
+     sendConfigMessage();
+     SEND_CONFIG_MESSAGE = false;  // Reset flag after sending
+     configMessageCounter = 0;
+     delay(1000);
+     return;
+   }
 
-  // Check if we should send a reset config message
-  if (SEND_RESET_CONFIG) {
-    sendResetConfigMessage();
-    SEND_RESET_CONFIG = false;  // Reset flag after sending
-    delay(1000);
-    configMessageCounter = 0;
-    return;
-  }
+   // Check if we should send a reset config message
+   if (SEND_RESET_CONFIG) {
+     sendResetConfigMessage();
+     SEND_RESET_CONFIG = false;  // Reset flag after sending
+     delay(1000);
+     configMessageCounter = 0;
+     return;
+   }
 
-  // Normal operation: Wait for a message from LoRa
-  bool messageReceived = false;
-  while (!messageReceived)
-  {
+   // Normal operation: Wait for a message from LoRa
+   bool messageReceived = false;
+   while (!messageReceived)
+   {
 /*     // Check if it's time to switch to the next event
-    unsigned long currentTime = millis() / 1000; // Convert to seconds
-    if (currentTime - lastEventSwitchTime >= EVENT_SWITCH_INTERVAL_SECONDS)
-    {
-      lastEventSwitchTime = currentTime;
-      //currentEventIndex = (currentEventIndex + 1) % eventIdListSize;
-      Serial.print("Switching to event index: ");
-      Serial.print(currentEventIndex);
-      Serial.print(", Event ID: 0x");
-      Serial.print(eventIdList[currentEventIndex], HEX);
-      Serial.print(", Event Name: ");
-      Serial.println(eventNameList[currentEventIndex]);
-    } */
+     unsigned long currentTime = millis() / 1000; // Convert to seconds
+     if (currentTime - lastEventSwitchTime >= EVENT_SWITCH_INTERVAL_SECONDS)
+     {
+       lastEventSwitchTime = currentTime;
+       //currentEventIndex = (currentEventIndex + 1) % eventIdListSize;
+       Serial.print("Switching to event index: ");
+       Serial.print(currentEventIndex);
+       Serial.print(", Event ID: 0x");
+       Serial.print(eventIdList[currentEventIndex], HEX);
+       Serial.print(", Event Name: ");
+       Serial.println(eventNameList[currentEventIndex]);
+     } */
+  //Serial.println("Wait for incomming message");
+     // Check for incoming LoRa message
+     if (e32ttl.available() > 1)
+     {
+       receiveValuesLoRa();
+       messageReceived = true;
+     }
 
-    // Check for incoming LoRa message
-    if (e32ttl.available() > 1)
-    {
-      receiveValuesLoRa();
-      messageReceived = true;
-    }
-
-    delay(100); // Small delay to avoid busy loop
-  }
-  
-  delay(10); // Wait a bit before sending the next message
-  ++bootCount;
-  ++configMessageCounter;
-  Serial.println("Hi, I'm going to send message!");
-  lora_payload_t payload;
-  payload.messageID = bootCount;
-  // Use the current event from the list
-  payload.lora_eventID = LORA_ACK;
-  payload.elapsed_time_ms = millis();
-  payload.pulse_count = interruptCounter;
-  payload.checksum = lora_payload_checksum(&payload);     // Calculate checksum
-
-    // 2) Binärdaten in String sicher verpacken (Byte-für-Byte)
-  String msg;
-  msg.reserve(sizeof(payload) + 2); // +2 für die Delimiter
-  const uint8_t* p = reinterpret_cast<const uint8_t*>(&payload);
-  for (size_t i = 0; i < sizeof(payload); ++i) {
-    msg += (char)p[i];  // explizit jedes Byte anhängen (inkl. 0x00)
-  }
-
-  // 3) Delimiter *danach* anhängen (Empfänger wartet darauf)
-  msg += (char)E32_MSG_DELIMITER_1;
-  msg += (char)E32_MSG_DELIMITER_2;
-
-  
-  ResponseStatus rs = e32ttl.sendMessage(msg);
-
-  Serial.print("message sent: ");
-
-printPayloadHex((const uint8_t*)msg.c_str(), msg.length());
-  Serial.println("Message sent. Waiting for next receive...");
+     delay(100); // Small delay to avoid busy loop
+   }
+   
+   delay(10); // Wait a bit before sending the next message
+   ++bootCount;
+   ++configMessageCounter;
+   
+   // Send ACK message only if no config messages are being sent
+   sendAckMessage();
 }
 
 void printParameters(struct Configuration configuration)
@@ -458,6 +437,41 @@ void receiveValuesLoRa()
     delay(500);
     neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Off
   }
+}
+
+/**
+ * @brief Send ACK message to acknowledge received message
+ */
+void sendAckMessage()
+{
+  Serial.println("Hi, I'm going to send message!");
+  lora_payload_t payload;
+  payload.messageID = bootCount;
+  // Use the current event from the list
+  payload.lora_eventID = LORA_EVENT_RESUME_SLEEP_MODE;
+  payload.elapsed_time_ms = millis();
+  payload.pulse_count = interruptCounter;
+  payload.checksum = lora_payload_checksum(&payload);     // Calculate checksum
+
+    // 2) Binärdaten in String sicher verpacken (Byte-für-Byte)
+  String msg;
+  msg.reserve(sizeof(payload) + 2); // +2 für die Delimiter
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(&payload);
+  for (size_t i = 0; i < sizeof(payload); ++i) {
+    msg += (char)p[i];  // explizit jedes Byte anhängen (inkl. 0x00)
+  }
+
+  // 3) Delimiter *danach* anhängen (Empfänger wartet darauf)
+  msg += (char)E32_MSG_DELIMITER_1;
+  msg += (char)E32_MSG_DELIMITER_2;
+
+  
+  ResponseStatus rs = e32ttl.sendMessage(msg);
+
+  Serial.print("message sent: ");
+
+printPayloadHex((const uint8_t*)msg.c_str(), msg.length());
+  Serial.println("Message sent. Waiting for next receive...");
 }
 
 // Function to convert milliseconds into hours, minutes, and seconds
